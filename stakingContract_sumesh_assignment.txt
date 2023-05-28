@@ -1,0 +1,111 @@
+// ---- contract address - 0x90fCC8aeCD23508C2Ab939B04d59577a5329B042 ( polygon Mumbai testnet) 
+link - https://mumbai.polygonscan.com/address/0x90fCC8aeCD23508C2Ab939B04d59577a5329B042
+
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+
+contract StakingToken is ERC20 {
+    using SafeMath for uint256;
+
+    string private _name;
+    string private _symbol;
+    uint8 private _decimals;
+
+    uint256 REWARD_RATE = 1; // Initial reward rate as 1% of staked amount per second
+
+    struct Stake {
+        uint256 amount;
+        uint256 timestamp;
+    }
+
+    mapping(address => Stake) private _stakes;
+
+    event Staked(address indexed user, uint256 amount);
+    event Unstaked(address indexed user, uint256 amount, uint256 reward);
+
+    constructor(string memory name_, string memory symbol_) ERC20(name_, symbol_) {
+        _name = name_;
+        _symbol = symbol_;
+        _decimals = 18;
+    }
+
+    // The contract should be able to mint new tokens.
+    function mint(uint256 amount) external {
+        require(amount > 0, "Amount must be greater than zero");
+        _mint(msg.sender, amount);
+    }
+
+
+    // Users should be able to stake their tokens and unstake them.
+    function stake(uint256 amount) external {
+        require(amount > 0, "Amount must be greater than zero");
+        require(balanceOf(msg.sender) >= amount, "Insufficient balance");
+
+        if (_stakes[msg.sender].amount == 0) {
+            _stakes[msg.sender].timestamp = block.timestamp;
+        }
+
+        _stakes[msg.sender].amount = _stakes[msg.sender].amount.add(amount);
+        _transfer(msg.sender, address(this), amount);
+
+        emit Staked(msg.sender, amount);
+    }
+    
+
+    // The contract should handle the calculation and distribution of rewards.
+    function unstake() external {
+        require(_stakes[msg.sender].amount > 0, "No staked amount");
+
+        uint256 amount = _stakes[msg.sender].amount;
+        uint256 reward = calculateReward(msg.sender);
+        uint256 totalAmt = amount + reward;
+
+        delete _stakes[msg.sender];
+        _mint(address(this), reward);
+
+        _transfer(address(this), msg.sender, totalAmt);
+
+        emit Unstaked(msg.sender, amount, reward);
+    }
+
+
+    // Users should receive rewards for staking, with rewards increasing based on the length of time staked.
+    function calculateReward(address user) public view returns (uint256) {
+        require(_stakes[user].amount > 0, "No staked amount");
+
+        uint256 stakingDuration = block.timestamp - _stakes[user].timestamp;
+        uint256 rewardPercentage=(_stakes[user].amount/100)*REWARD_RATE;   // the reward percentage will calculate reward per amount
+        uint256 day = 30 days;    // the days variable is used to increse day after a month
+
+        if(stakingDuration > day) // incresing rewardpercetage if duration is more that a month and keep on increasing 
+        {
+            rewardPercentage++;
+            day = day+30;
+        }
+
+        uint256 reward = stakingDuration * rewardPercentage;
+        return reward;
+    }
+
+
+    // The contract should track the amount of time each user's tokens are staked.
+    function getStakeInfo(address user) public view returns (uint256 amount, uint256 duration) {
+        amount = _stakes[user].amount;
+        duration = block.timestamp.sub(_stakes[user].timestamp);
+    }
+
+    function getName() public view returns (string memory) {
+        return _name;
+    }
+
+    function getSymbol() public view returns (string memory) {
+        return _symbol;
+    }
+
+    function getDecimals() public view returns (uint8) {
+        return _decimals;
+    }
+}
